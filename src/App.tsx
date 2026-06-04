@@ -5,6 +5,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ChatPage } from "./pages/ChatPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
+import { StatsPage } from "./pages/StatsPage";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/knowledge" element={<KnowledgePage />} />
+            <Route path="/stats" element={<StatsPage />} />
           </Route>
 
           {/* Por defecto */}

@@ -101,11 +101,32 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface Conversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StatsSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
   messageCount: number;
   totalCostUsd: number;
+  conversationCount: number;
+  avgLatencyMs: number;
+}
+
+/** Uso agregado de una sola conversación. */
+export interface ConversationStat {
+  conversationId: string;
+  title: string;
+  turnCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  avgLatencyMs: number;
+  lastActivity: string;
 }
 
 export type DocumentStatus = "processing" | "ready" | "error";
@@ -139,16 +160,32 @@ export function register(email: string, password: string): Promise<AuthResponse>
   });
 }
 
-export function getHistory(): Promise<ChatMessage[]> {
-  return apiFetch<ChatMessage[]>("/chat/history");
+export function listConversations(): Promise<Conversation[]> {
+  return apiFetch<Conversation[]>("/chat/conversations");
 }
 
-export function clearChat(): Promise<void> {
-  return apiFetch<void>("/chat", { method: "DELETE" });
+export function createConversation(): Promise<Conversation> {
+  return apiFetch<Conversation>("/chat/conversations", { method: "POST" });
+}
+
+export function getHistory(conversationId: string): Promise<ChatMessage[]> {
+  return apiFetch<ChatMessage[]>(
+    `/chat/conversations/${conversationId}/messages`,
+  );
+}
+
+export function deleteConversation(conversationId: string): Promise<void> {
+  return apiFetch<void>(`/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+  });
 }
 
 export function getStats(): Promise<StatsSummary> {
   return apiFetch<StatsSummary>("/stats");
+}
+
+export function getConversationStats(): Promise<ConversationStat[]> {
+  return apiFetch<ConversationStat[]>("/stats/conversations");
 }
 
 export function listDocuments(): Promise<DocumentEntity[]> {

@@ -7,10 +7,12 @@ import {
 } from "react";
 import {
   API_URL,
-  clearChat,
+  createConversation,
+  deleteConversation,
   getHistory,
   getStats,
   getToken,
+  listConversations,
   type ChatMessage,
   type StatsSummary,
 } from "../lib/api";
@@ -32,14 +34,22 @@ export function ChatPage() {
   const [meta, setMeta] = useState<DoneMeta | null>(null);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  // Conversación activa (la más reciente del usuario). Solo se muestra esta.
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   const sourceRef = useRef<EventSource | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Carga el historial y las stats acumuladas al montar.
+  // Carga la última conversación activa y las stats acumuladas al montar.
   useEffect(() => {
-    getHistory()
-      .then(setMessages)
+    listConversations()
+      .then(async (conversations) => {
+        const latest = conversations[0];
+        if (!latest) return;
+        setActiveId(latest.id);
+        const history = await getHistory(latest.id);
+        setMessages(history);
+      })
       .catch(() => setMessages([]))
       .finally(() => setLoadingHistory(false));
 
@@ -67,13 +77,26 @@ export function ChatPage() {
     });
   };
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
     if (!text || streaming) return;
 
     setError(null);
     setMeta(null);
     setInput("");
+
+    // Asegura una conversación activa (créala en el primer mensaje).
+    let conversationId = activeId;
+    if (!conversationId) {
+      try {
+        const conv = await createConversation();
+        conversationId = conv.id;
+        setActiveId(conv.id);
+      } catch {
+        setError("No se pudo crear la conversación.");
+        return;
+      }
+    }
 
     // Mensaje del usuario + placeholder del asistente.
     setMessages((prev) => [
@@ -84,9 +107,9 @@ export function ChatPage() {
     setStreaming(true);
 
     const token = getToken() ?? "";
-    const url = `${API_URL}/chat/stream?message=${encodeURIComponent(
-      text,
-    )}&token=${encodeURIComponent(token)}`;
+    const url = `${API_URL}/chat/stream?conversationId=${encodeURIComponent(
+      conversationId,
+    )}&message=${encodeURIComponent(text)}&token=${encodeURIComponent(token)}`;
 
     const source = new EventSource(url);
     sourceRef.current = source;
@@ -135,26 +158,44 @@ export function ChatPage() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    send();
+    void send();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send();
     }
   };
 
-  const handleClear = async () => {
+  // Inicia una conversación nueva: vacía la vista y la activa al primer envío.
+  const handleNew = () => {
     if (streaming) return;
-    if (!confirm("¿Borrar toda la conversación?")) return;
+    setActiveId(null);
+    setMessages([]);
+    setMeta(null);
+    setError(null);
+  };
+
+  // Borra (soft delete) la conversación activa y pasa a la anterior, si existe.
+  const handleDelete = async () => {
+    if (streaming || !activeId) return;
+    if (!confirm("¿Borrar esta conversación?")) return;
     try {
-      await clearChat();
-      setMessages([]);
+      await deleteConversation(activeId);
       setMeta(null);
       setError(null);
+      const conversations = await listConversations();
+      const latest = conversations[0];
+      if (latest) {
+        setActiveId(latest.id);
+        setMessages(await getHistory(latest.id));
+      } else {
+        setActiveId(null);
+        setMessages([]);
+      }
     } catch {
-      setError("No se pudo limpiar la conversación.");
+      setError("No se pudo borrar la conversación.");
     }
   };
 
@@ -162,13 +203,22 @@ export function ChatPage() {
     <div className="flex h-full flex-col">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Chat</h2>
-        <button
-          onClick={handleClear}
-          disabled={streaming || messages.length === 0}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
-        >
-          Limpiar conversación
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleNew}
+            disabled={streaming}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+          >
+            Nueva conversación
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={streaming || !activeId}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+          >
+            Borrar conversación
+          </button>
+        </div>
       </div>
 
       <div
@@ -229,9 +279,12 @@ export function ChatPage() {
 
       {stats && stats.messageCount > 0 && (
         <p className="mt-1 text-xs text-slate-400">
-          Total acumulado: {stats.messageCount} mensajes ·{" "}
+          Total acumulado: {stats.messageCount} mensajes en{" "}
+          {stats.conversationCount} conversaciones ·{" "}
           {stats.totalInputTokens}/{stats.totalOutputTokens} tokens ·{" "}
           ${stats.totalCostUsd.toFixed(4)}
+          {stats.avgLatencyMs > 0 &&
+            ` · ${(stats.avgLatencyMs / 1000).toFixed(1)}s latencia media`}
         </p>
       )}
 
