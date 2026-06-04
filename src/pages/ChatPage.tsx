@@ -9,14 +9,18 @@ import {
   API_URL,
   clearChat,
   getHistory,
+  getStats,
   getToken,
   type ChatMessage,
+  type StatsSummary,
 } from "../lib/api";
 
 interface DoneMeta {
   toolsUsed?: string[];
   inputTokens?: number;
   outputTokens?: number;
+  model?: string;
+  costUsd?: number;
   limitReached?: boolean;
 }
 
@@ -26,17 +30,22 @@ export function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<DoneMeta | null>(null);
+  const [stats, setStats] = useState<StatsSummary | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
   const sourceRef = useRef<EventSource | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Carga el historial al montar.
+  // Carga el historial y las stats acumuladas al montar.
   useEffect(() => {
     getHistory()
       .then(setMessages)
       .catch(() => setMessages([]))
       .finally(() => setLoadingHistory(false));
+
+    getStats()
+      .then(setStats)
+      .catch(() => setStats(null));
 
     // Cierra el stream si el componente se desmonta.
     return () => sourceRef.current?.close();
@@ -100,6 +109,12 @@ export function ChatPage() {
       } catch {
         /* metadata opcional */
       }
+      // Refresca los totales acumulados con el turno recién guardado.
+      getStats()
+        .then(setStats)
+        .catch(() => {
+          /* no crítico */
+        });
       finish();
     });
 
@@ -207,7 +222,16 @@ export function ChatPage() {
             <>Herramientas: {meta.toolsUsed.join(", ")} · </>
           )}
           Tokens: {meta.inputTokens ?? 0} entrada / {meta.outputTokens ?? 0} salida
+          {meta.costUsd != null && ` · Costo: $${meta.costUsd.toFixed(4)}`}
           {meta.limitReached && " · ⚠️ límite alcanzado"}
+        </p>
+      )}
+
+      {stats && stats.messageCount > 0 && (
+        <p className="mt-1 text-xs text-slate-400">
+          Total acumulado: {stats.messageCount} mensajes ·{" "}
+          {stats.totalInputTokens}/{stats.totalOutputTokens} tokens ·{" "}
+          ${stats.totalCostUsd.toFixed(4)}
         </p>
       )}
 

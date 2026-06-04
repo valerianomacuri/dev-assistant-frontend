@@ -101,6 +101,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface StatsSummary {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  messageCount: number;
+  totalCostUsd: number;
+}
+
 export type DocumentStatus = "processing" | "ready" | "error";
 
 export interface DocumentEntity {
@@ -138,6 +145,10 @@ export function getHistory(): Promise<ChatMessage[]> {
 
 export function clearChat(): Promise<void> {
   return apiFetch<void>("/chat", { method: "DELETE" });
+}
+
+export function getStats(): Promise<StatsSummary> {
+  return apiFetch<StatsSummary>("/stats");
 }
 
 export function listDocuments(): Promise<DocumentEntity[]> {
