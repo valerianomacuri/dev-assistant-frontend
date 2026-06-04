@@ -129,7 +129,12 @@ export interface ConversationStat {
   lastActivity: string;
 }
 
-export type DocumentStatus = "processing" | "ready" | "error";
+export type DocumentStatus =
+  | "queued"
+  | "chunking"
+  | "embedding"
+  | "ready"
+  | "failed";
 
 export interface DocumentEntity {
   id: string;
@@ -186,6 +191,18 @@ export function getStats(): Promise<StatsSummary> {
 
 export function getConversationStats(): Promise<ConversationStat[]> {
   return apiFetch<ConversationStat[]>("/stats/conversations");
+}
+
+/** Descarga el PDF del reporte de stats (generado por la Lambda). */
+export async function downloadStatsReport(): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}/stats/report.pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    throw new ApiError(`No se pudo generar el PDF (${res.status})`, res.status);
+  }
+  return res.blob();
 }
 
 export function listDocuments(): Promise<DocumentEntity[]> {

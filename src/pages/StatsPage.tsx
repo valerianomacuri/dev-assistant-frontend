@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ApiError,
+  downloadStatsReport,
   getConversationStats,
   getStats,
   type ConversationStat,
@@ -30,6 +31,29 @@ export function StatsPage() {
   const [conversations, setConversations] = useState<ConversationStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const hasActivity = !!summary && summary.messageCount > 0;
+
+  const handleDownloadPdf = async () => {
+    setError(null);
+    setDownloading(true);
+    try {
+      const blob = await downloadStatsReport();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reporte-stats.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "No se pudo descargar el PDF.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([getStats(), getConversationStats()])
@@ -49,11 +73,20 @@ export function StatsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold text-slate-900">Estadísticas</h2>
-        <p className="text-sm text-slate-500">
-          Uso y costo de tus conversaciones con el asistente.
-        </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Estadísticas</h2>
+          <p className="text-sm text-slate-500">
+            Uso y costo de tus conversaciones con el asistente.
+          </p>
+        </div>
+        <button
+          onClick={handleDownloadPdf}
+          disabled={downloading || !hasActivity}
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        >
+          {downloading ? "Generando PDF…" : "Descargar PDF"}
+        </button>
       </div>
 
       {error && (

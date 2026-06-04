@@ -6,6 +6,7 @@ import {
   uploadDocument,
   type DocumentEntity,
 } from "../lib/api";
+import { onDocumentStatus } from "../lib/socket";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -22,15 +23,19 @@ function formatDate(iso: string): string {
 }
 
 const STATUS_STYLES: Record<DocumentEntity["status"], string> = {
-  processing: "bg-amber-100 text-amber-800",
+  queued: "bg-slate-100 text-slate-700",
+  chunking: "bg-amber-100 text-amber-800",
+  embedding: "bg-amber-100 text-amber-800",
   ready: "bg-green-100 text-green-800",
-  error: "bg-red-100 text-red-800",
+  failed: "bg-red-100 text-red-800",
 };
 
 const STATUS_LABELS: Record<DocumentEntity["status"], string> = {
-  processing: "Procesando…",
+  queued: "En cola…",
+  chunking: "Troceando…",
+  embedding: "Generando embeddings…",
   ready: "Listo",
-  error: "Error",
+  failed: "Error",
 };
 
 export function KnowledgePage() {
@@ -55,13 +60,27 @@ export function KnowledgePage() {
     refresh().finally(() => setLoading(false));
   }, []);
 
-  // Polling mientras haya documentos en procesamiento.
+  // Progreso en tiempo real vía WebSocket (reemplaza el polling).
   useEffect(() => {
-    const anyProcessing = docs.some((d) => d.status === "processing");
-    if (!anyProcessing) return;
-    const id = setInterval(refresh, 3000);
-    return () => clearInterval(id);
-  }, [docs]);
+    return onDocumentStatus((event) => {
+      setDocs((prev) => {
+        const idx = prev.findIndex((d) => d.id === event.id);
+        if (idx === -1) {
+          // Documento aún no listado (subida muy reciente): refresca la lista.
+          void refresh();
+          return prev;
+        }
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          status: event.status,
+          chunkCount: event.chunkCount ?? next[idx].chunkCount,
+          errorMessage: event.errorMessage ?? next[idx].errorMessage,
+        };
+        return next;
+      });
+    });
+  }, []);
 
   const handleFileChange = async (file: File | undefined) => {
     if (!file) return;
@@ -144,7 +163,7 @@ export function KnowledgePage() {
                 <tr key={doc.id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {doc.filename}
-                    {doc.status === "error" && doc.errorMessage && (
+                    {doc.status === "failed" && doc.errorMessage && (
                       <span className="block text-xs font-normal text-red-600">
                         {doc.errorMessage}
                       </span>
