@@ -21,6 +21,12 @@ interface DoneMeta {
   toolsUsed?: string[];
   inputTokens?: number;
   outputTokens?: number;
+  totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  iterations?: number;
+  runId?: string;
+  runStatus?: "running" | "completed" | "failed" | "max_iters";
   model?: string;
   costUsd?: number;
   limitReached?: boolean;
@@ -272,8 +278,12 @@ export function ChatPage() {
             <>Herramientas: {meta.toolsUsed.join(", ")} · </>
           )}
           Tokens: {meta.inputTokens ?? 0} entrada / {meta.outputTokens ?? 0} salida
+          {meta.cacheReadTokens != null && meta.cacheReadTokens > 0 &&
+            ` · ${meta.cacheReadTokens} de caché`}
+          {meta.iterations != null && meta.iterations > 1 &&
+            ` · ${meta.iterations} iteraciones`}
           {meta.costUsd != null && ` · Costo: $${meta.costUsd.toFixed(4)}`}
-          {meta.limitReached && " · ⚠️ límite alcanzado"}
+          {meta.limitReached && " · ⚠️ límite de iteraciones alcanzado"}
         </p>
       )}
 
