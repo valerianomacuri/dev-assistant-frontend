@@ -14,8 +14,10 @@ import {
   getToken,
   listConversations,
   type ChatMessage,
+  type Conversation,
   type StatsSummary,
 } from "../lib/api";
+import { ConversationSidebar } from "../components/ConversationSidebar";
 
 interface DoneMeta {
   toolsUsed?: string[];
@@ -40,17 +42,31 @@ export function ChatPage() {
   const [meta, setMeta] = useState<DoneMeta | null>(null);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  // Conversación activa (la más reciente del usuario). Solo se muestra esta.
+  // Conversación activa: la que se muestra en el área de chat.
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Lista completa de conversaciones del usuario (para el sidebar).
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
   const sourceRef = useRef<EventSource | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // Refresca la lista de conversaciones del sidebar.
+  const refreshConversations = () =>
+    listConversations()
+      .then((list) => {
+        setConversations(list);
+        return list;
+      })
+      .catch(() => {
+        setConversations([]);
+        return [] as Conversation[];
+      });
+
   // Carga la última conversación activa y las stats acumuladas al montar.
   useEffect(() => {
-    listConversations()
-      .then(async (conversations) => {
-        const latest = conversations[0];
+    refreshConversations()
+      .then(async (list) => {
+        const latest = list[0];
         if (!latest) return;
         setActiveId(latest.id);
         const history = await getHistory(latest.id);
@@ -98,6 +114,7 @@ export function ChatPage() {
         const conv = await createConversation();
         conversationId = conv.id;
         setActiveId(conv.id);
+        void refreshConversations();
       } catch {
         setError("No se pudo crear la conversación.");
         return;
@@ -144,6 +161,8 @@ export function ChatPage() {
         .catch(() => {
           /* no crítico */
         });
+      // Refresca el sidebar: título autogenerado y reordenamiento por actividad.
+      void refreshConversations();
       finish();
     });
 
@@ -183,22 +202,41 @@ export function ChatPage() {
     setError(null);
   };
 
-  // Borra (soft delete) la conversación activa y pasa a la anterior, si existe.
-  const handleDelete = async () => {
-    if (streaming || !activeId) return;
+  // Cambia a otra conversación y carga su historial.
+  const handleSelect = async (id: string) => {
+    if (streaming || id === activeId) return;
+    setActiveId(id);
+    setMeta(null);
+    setError(null);
+    setLoadingHistory(true);
+    try {
+      setMessages(await getHistory(id));
+    } catch {
+      setMessages([]);
+      setError("No se pudo cargar la conversación.");
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Borra (soft delete) una conversación; si era la activa, pasa a otra.
+  const handleDelete = async (id: string) => {
+    if (streaming) return;
     if (!confirm("¿Borrar esta conversación?")) return;
     try {
-      await deleteConversation(activeId);
-      setMeta(null);
-      setError(null);
-      const conversations = await listConversations();
-      const latest = conversations[0];
-      if (latest) {
-        setActiveId(latest.id);
-        setMessages(await getHistory(latest.id));
-      } else {
-        setActiveId(null);
-        setMessages([]);
+      await deleteConversation(id);
+      const list = await refreshConversations();
+      if (id === activeId) {
+        setMeta(null);
+        setError(null);
+        const latest = list[0];
+        if (latest) {
+          setActiveId(latest.id);
+          setMessages(await getHistory(latest.id));
+        } else {
+          setActiveId(null);
+          setMessages([]);
+        }
       }
     } catch {
       setError("No se pudo borrar la conversación.");
@@ -206,31 +244,21 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Chat</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={handleNew}
-            disabled={streaming}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
-          >
-            Nueva conversación
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={streaming || !activeId}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
-          >
-            Borrar conversación
-          </button>
-        </div>
-      </div>
+    <div className="flex h-full gap-4">
+      <ConversationSidebar
+        conversations={conversations}
+        activeId={activeId}
+        disabled={streaming}
+        onSelect={handleSelect}
+        onNew={handleNew}
+        onDelete={handleDelete}
+      />
 
-      <div
-        ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4"
-      >
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4"
+        >
         {loadingHistory ? (
           <p className="text-center text-sm text-slate-400">Cargando historial…</p>
         ) : messages.length === 0 ? (
@@ -315,6 +343,7 @@ export function ChatPage() {
           {streaming ? "…" : "Enviar"}
         </button>
       </form>
+      </div>
     </div>
   );
 }

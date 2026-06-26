@@ -21,7 +21,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full flex-col bg-slate-100">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="text-lg font-semibold text-slate-900">
               🤖 Dev Assistant
@@ -54,7 +54,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-hidden px-4 py-4">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4">
         {children}
       </main>
     </div>
